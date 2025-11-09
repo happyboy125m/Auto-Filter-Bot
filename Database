@@ -1,0 +1,112 @@
+# topdb.py
+# ─────────────────────────────────────────────────────────────
+# Handles the database operations for Top Movies collection.
+# Uses MongoDB to store, fetch, and manage top-rated movies.
+# ─────────────────────────────────────────────────────────────
+
+from pymongo import MongoClient, errors
+
+class TopDB:
+    """
+    TopDB is responsible for managing the 'top_movies' collection.
+    It supports inserting, retrieving, and clearing top-rated movies.
+    """
+
+    def __init__(self, uri: str = "mongodb://localhost:27017/", db_name: str = "movie_bot_db"):
+        try:
+            self.client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+            # Trigger connection check
+            self.client.server_info()
+            print("[✅] Connected to MongoDB successfully!")
+
+            self.db = self.client[db_name]
+            self.collection = self.db["top_movies"]
+
+        except errors.ServerSelectionTimeoutError:
+            print("[❌] MongoDB connection failed! Please check your URI or network.")
+            self.client = None
+            self.db = None
+            self.collection = None
+
+    # ───────────────────────────────────────────────
+    # Insert a new movie document
+    # ───────────────────────────────────────────────
+    def insert_movie(self, movie_data: dict):
+        if not self.collection:
+            print("[⚠️] No database connection.")
+            return None
+        if not isinstance(movie_data, dict):
+            print("[⚠️] Invalid movie data format. Must be a dictionary.")
+            return None
+        try:
+            result = self.collection.insert_one(movie_data)
+            print(f"[+] Inserted movie: {movie_data.get('title', 'Unknown')}")
+            return result.inserted_id
+        except Exception as e:
+            print(f"[❌] Error inserting movie: {e}")
+            return None
+
+    # ───────────────────────────────────────────────
+    # Get top movies sorted by rating (descending)
+    # ───────────────────────────────────────────────
+    def get_top_movies(self, limit: int = 10):
+        if not self.collection:
+            print("[⚠️] No database connection.")
+            return []
+        try:
+            movies = list(self.collection.find().sort("rating", -1).limit(limit))
+            print(f"[📜] Retrieved {len(movies)} top movies.")
+            return movies
+        except Exception as e:
+            print(f"[❌] Error fetching top movies: {e}")
+            return []
+
+    # ───────────────────────────────────────────────
+    # Clear all top movies from the collection
+    # ───────────────────────────────────────────────
+    def clear_top_movies(self):
+        if not self.collection:
+            print("[⚠️] No database connection.")
+            return 0
+        try:
+            result = self.collection.delete_many({})
+            print(f"[🧹] Cleared {result.deleted_count} movie(s) from top list.")
+            return result.deleted_count
+        except Exception as e:
+            print(f"[❌] Error clearing top movies: {e}")
+            return 0
+
+    # ───────────────────────────────────────────────
+    # Close MongoDB connection safely
+    # ───────────────────────────────────────────────
+    def close_connection(self):
+        if self.client:
+            self.client.close()
+            print("[🔒] MongoDB connection closed.")
+
+
+# ───────────────────────────────────────────────
+# Example usage (for testing)
+# ───────────────────────────────────────────────
+if __name__ == "__main__":
+    db = TopDB(uri="mongodb://localhost:27017/")
+
+    # Insert a sample movie
+    db.insert_movie({
+        "title": "Inception",
+        "rating": 9.0,
+        "year": 2010,
+        "genre": ["Action", "Sci-Fi"],
+        "director": "Christopher Nolan"
+    })
+
+    # Retrieve top movies
+    top_movies = db.get_top_movies(limit=5)
+    for movie in top_movies:
+        print(f"🎬 {movie['title']} — ⭐ {movie['rating']}")
+
+    # Optional: clear all movies
+    # db.clear_top_movies()
+
+    # Close DB connection
+    db.close_connection()
